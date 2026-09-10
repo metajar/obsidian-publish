@@ -33,11 +33,16 @@ last_updated: 2026-09-10
 
 ## Naming
 
-[TO BE DETERMINED — populate after first implementation. Anticipated: Go packages lowercase short names, handler files per resource (`pages.go`, `theme.go`); DB columns snake_case (`password_hash`, `created_at`); plugin files per Obsidian scaffold convention (`main.ts`, `styles.css`).]
+- Go packages: lowercase short names under `server/internal/` — `config`, `store`, `pwhash`, `markdown`, `session`, `ratelimit`, `httpapi`.
+- Handler files per resource in `httpapi`: `server.go` (router + middleware + error handler), `pages.go` (plugin API), `public.go` (reader routes + password form).
+- DB columns snake_case (`password_hash`, `content_md`, `created_at`); timestamps stored as RFC3339Nano UTC text.
+- API JSON camelCase (`password_protected`, `source_note_id`, `created_at`).
+- Plugin files will follow the Obsidian scaffold convention (`main.ts`, `styles.css`) when built.
 
 ## Structure
 
-[TO BE DETERMINED — populate after first implementation. Anticipated: monorepo with `server/` (Go module, `cmd/server` entrypoint) and `plugin/` (Obsidian plugin) at the top level; reader-facing routes and the token-authenticated `/api/*` routes stay separate in the server.]
+- Monorepo: `server/` (Go module `obsidian-publish/server`, entrypoint `cmd/server/main.go`) and `plugin/` at the top level.
+- Reader-facing routes and the token-authenticated `/api/*` routes stay separate in the server (`public.go` vs `pages.go`, wired on separate Echo groups in `server.go`).
 
 ## Patterns
 

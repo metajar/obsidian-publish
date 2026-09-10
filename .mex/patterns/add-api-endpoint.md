@@ -31,7 +31,7 @@ The API contract lives in `PRD.md` §10. Endpoints come in pairs by trust plane:
 5. Update both sides' error handling so the plugin can surface server errors (route taken, invalid token, unreachable).
 
 ## Gotchas
-- [VERIFY AFTER FIRST IMPLEMENTATION] Exact handler/persistence file layout.
+- Exact layout (as implemented): routes wired in `server/internal/httpapi/server.go` (authed `/api` Echo group vs public), plugin-API handlers in `pages.go`, reader handlers + password form in `public.go`, persistence in `server/internal/store/store.go` (SQLite via modernc, `user_version` pragma for schema versioning).
 - Never add a plugin-API behavior to a public route or vice versa (hard invariant).
 - Route slug validation must run on the server too — the plugin's client-side check is UX, not security.
 - Reader-facing route handling must not leak protected content in error paths.

@@ -51,4 +51,6 @@ last_updated: 2026-09-10
 
 ## Version Constraints
 
-[TO BE DETERMINED — pin minimum Go and Node versions at first build.]
+- **Go 1.26** — server builds with the toolchain at first implementation; `CGO_ENABLED=0 go build` verified (pure-Go only).
+- Server deps pinned in `server/go.mod`: Echo v4.15.4, modernc.org/sqlite v1.58.0, goldmark v1.8.6, golang.org/x/crypto v0.57.0.
+- Node/esbuild versions: TBD at plugin build time.

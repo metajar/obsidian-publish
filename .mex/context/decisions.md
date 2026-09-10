@@ -96,8 +96,13 @@ last_updated: 2026-09-10
 ### [TO BE DETERMINED] Theming scope
 Pending: global site theme vs. per-page theme override (PRD §14.1 — spec leans global with optional per-page override). Decide before implementing theme storage/API.
 
-### [TO BE DETERMINED] Session mechanism for password-protected pages
-Pending: cookie vs. signed URL token for the short-lived route-scoped session (PRD §14.4). Decide when implementing the password gate; affects `context/auth-security.md`.
+### Session mechanism: route-scoped HMAC-signed cookie
+**Date:** 2026-09-10
+**Status:** Active
+**Decision:** On successful password entry the server sets an `op_session` cookie — HMAC-SHA256-signed payload binding route + 1-hour expiry, HttpOnly, Secure, SameSite=Lax, cookie Path scoped to `/{route}` (implemented in `server/internal/session`).
+**Reasoning:** Cookie gives natural re-reads without URL sharing; route binding in both the signed payload and the cookie Path keeps one unlock from opening other pages; signing (not server-side session state) keeps the server stateless.
+**Alternatives considered:** Signed URL token (rejected — leaked when readers share the URL back; access should not be sticky to the link itself).
+**Consequences:** Rotating `data/session-secret` revokes all outstanding sessions. Supersedes the open question in PRD §14.4.
 
 ### [TO BE DETERMINED] Route namespace
 Pending: flat routes vs. a fixed prefix like `/notes/{slug}` to avoid collisions with future server features (PRD §14.3). Decide before freezing the route table schema.
