@@ -40,7 +40,7 @@ last_updated: 2026-09-10
 1. Server: `cd server && go run ./cmd/server` — first run generates the API token (printed once) and session secret into the data dir
 2. Copy the printed token into plugin settings (Server URL + API token), use "Test connection"
 3. Plugin dev: `cd plugin && npm install && npm run build`, then enable the plugin in an Obsidian vault pointing at the built `main.js` (or symlink `plugin/` into `.obsidian/plugins/selfhosted-publish/`)
-4. Deploy: run the binary behind Cloudflare Tunnel OR directly on a droplet — either is supported; rotate the token by deleting the token file and restarting
+4. Deploy: run the binary behind Cloudflare Tunnel (`deploy/cloudflared.md`) OR directly on a droplet (`deploy/droplet.md`, uses `deploy/obsidian-publish.service`); a Docker image also builds from the repo root (`Dockerfile`). Either way, rotate the token by deleting the token file and restarting
 
 ## Environment Variables
 
