@@ -31,26 +31,37 @@ last_updated: 2026-09-10
 
 ## Prerequisites
 
-- Go [TO BE DETERMINED — pin minimum version at first build]
-- Node.js + npm [TO BE DETERMINED — pin minimum version at first build]
-- Obsidian (desktop) — for installing/running the plugin from `plugin/` in a vault
+- Go 1.26+ (server; pure-Go build verified with `CGO_ENABLED=0`)
+- Node.js + npm (plugin; esbuild + vitest via `plugin/package.json`)
+- Obsidian desktop — for loading `plugin/` as a vault plugin
 
 ## First-time Setup
 
-[TO BE DETERMINED — populate after first implementation. Anticipated:]
-1. Server: `cd server && go build ./cmd/server` (or `go run ./cmd/server`)
-2. Server generates an API token on first setup; set server URL + token in plugin settings
-3. Plugin: `cd plugin && npm install && npm run build`, then load `plugin/` as an Obsidian vault plugin
-4. Deploy: run the binary behind Cloudflare Tunnel OR directly on a droplet — either is supported
+1. Server: `cd server && go run ./cmd/server` — first run generates the API token (printed once) and session secret into the data dir
+2. Copy the printed token into plugin settings (Server URL + API token), use "Test connection"
+3. Plugin dev: `cd plugin && npm install && npm run build`, then enable the plugin in an Obsidian vault pointing at the built `main.js` (or symlink `plugin/` into `.obsidian/plugins/selfhosted-publish/`)
+4. Deploy: run the binary behind Cloudflare Tunnel OR directly on a droplet — either is supported; rotate the token by deleting the token file and restarting
 
 ## Environment Variables
 
-[TO BE DETERMINED — populate after first implementation. Anticipated server config: listen address, SQLite storage path, API token / token file. The token is generated on first server setup and pasted once into plugin settings. Do not commit real values.]
+Server config (flags > env > defaults; flags: `-addr`, `-db`, `-token-file`, `-secret-file`, `-base-url`):
+- `OBSPUB_ADDR` (optional) — listen address, default `:8080`
+- `OBSPUB_DB` (optional) — SQLite path, default `data/obsidian-publish.db`
+- `OBSPUB_TOKEN_FILE` (optional) — API token file, default `data/api-token` (0600)
+- `OBSPUB_SECRET_FILE` (optional) — session-signing secret, default `data/session-secret` (0600)
+- `OBSPUB_BASE_URL` (optional) — base for live URLs returned on publish; defaults to request Host
 
 ## Common Commands
 
-[TO BE DETERMINED — populate after first implementation. Anticipated: `go run ./cmd/server`, `go test ./...`, `go build ./cmd/server`; plugin `npm install`, `npm run dev` (esbuild watch), `npm run build`.]
+- `cd server && go run ./cmd/server` — run server (first run prints the API token once)
+- `cd server && go build ./... && go vet ./... && go test ./...` — build/lint/test server
+- `CGO_ENABLED=0 go build -o server ./cmd/server` — static cross-compilable binary
+- `cd plugin && npm install` — install plugin deps
+- `cd plugin && npm run build` — typecheck (tsc) + production bundle (esbuild)
+- `cd plugin && npm test` — vitest suite (slug + API client)
+- `cd plugin && npm run dev` — esbuild watch
 
 ## Common Issues
 
-[TO BE DETERMINED — only record issues that actually occur.]
+**401 from every plugin call:** token mismatch — check the token file on the server matches plugin settings exactly (constant-time compare rejects prefix errors silently). Rotate by deleting the token file and restarting the server.
+**Rate-limited while testing the password flow:** the limiter allows 5 auth attempts/min per IP+route and counts successes too — wait a minute or test from another route.

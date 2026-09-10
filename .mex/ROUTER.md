@@ -29,18 +29,19 @@ Then read this file fully before doing anything else in this session.
 
 **Working:**
 - `PRD.md` — complete product spec (scope, flows, requirements, API sketch)
-- MEX scaffold — context files populated from the PRD and owner decisions
 - Go server (`server/`, Go module `obsidian-publish/server`): publish/update/delete/list + route-availability APIs behind bearer-token middleware, public page serving with password gate, argon2id hashing, route-scoped HMAC session cookies, per-IP+route rate limiting, SQLite (modernc, pure-Go) persistence, goldmark rendering at publish time. `go build/vet/test ./...` all pass from `server/`.
+- Obsidian plugin (`plugin/`): publish command (palette + editor context menu), publish modal (slug prefill, debounced availability check, CSPRNG password generation, update-mode password semantics), settings tab (server URL + masked token, test connection, live published-pages table with confirmed unpublish + copy link). `npm run build` clean (zero TS errors), 37/37 vitest tests pass.
+- End-to-end smoke (2026-09-10, `main` after merge): 401 without token → publish → serve → password gate (form-only pre-auth, 401 wrong password, 303+cookie correct, content only with cookie) → list (no hash exposure) → delete → 404. All passed.
+- API contract frozen between plugin and server: bare-array `GET /api/pages`, `DELETE`→204, PUT password omitted=keep / null=remove / string=set, 401/409/400/404 error mapping.
 
 **Not yet built:**
-- Obsidian plugin: publish command + modal, settings (server config, page list, unpublish, theme)
 - Theming (v2 — `POST /api/theme` deliberately skipped in MVP server)
 - Asset/image publishing (fast-follow)
-- Deployment setup (Cloudflare Tunnel or droplet — owner's choice at deploy time)
+- Deployment setup (Cloudflare Tunnel or droplet — owner's choice at deploy time; systemd unit/container not yet written)
+- Plugin↔server integration test inside Obsidian itself (plugin built against the frozen contract; verified by unit tests + server-side e2e only)
 
 **Known issues:**
 - Open decisions in `context/decisions.md`: theming scope, route namespace, asset handling, custom CSS limits (session mechanism is now decided: route-scoped cookie)
-- API PUT password semantics agreed with plugin side: omitted = keep, JSON null (or "") = remove, string = set
 
 ## Routing Table
 

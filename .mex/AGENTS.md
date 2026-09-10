@@ -17,7 +17,7 @@ A self-hosted note-publishing system: an Obsidian plugin pushes Markdown notes t
 
 ## Commands
 - Server (from `server/`): `go run ./cmd/server` (flags: `-addr`, `-db`, `-token-file`, `-secret-file`, `-base-url`; env equivalents `OBSPUB_*`), `go test ./...`, `go build ./...`, `go vet ./...`.
-- Plugin (not yet built): `npm install`, `npm run dev` (esbuild watch), `npm run build`. See `PRD.md` for scope.
+- Plugin (from `plugin/`): `npm install`, `npm test` (vitest), `npm run build` (tsc + esbuild), `npm run dev` (esbuild watch).
 
 ## Code Graph
 Read broad, ground tight: load the overview context first (`ROUTER.md` routing), then ground specific claims to exact symbols via the graph instead of re-reading whole files.
