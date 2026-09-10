@@ -1,6 +1,8 @@
-import { App, Notice, PluginSettingTab, Setting, TextComponent } from "obsidian";
+import { App, Notice, PluginSettingTab, setIcon, Setting, TextComponent } from "obsidian";
 import { describeApiError, PageRecord } from "./api";
 import { ConfirmModal } from "./confirmModal";
+import { generatePassword } from "./password";
+import { ShowPasswordModal } from "./passwordModal";
 import type SelfHostedPublishPlugin from "./main";
 import { THEME_PRESETS } from "./themePresets";
 
@@ -156,6 +158,12 @@ export class PublishSettingTab extends PluginSettingTab {
       .setHeading()
       .addButton((btn) =>
         btn
+          .setButtonText("Publish current note")
+          .setIcon("send")
+          .onClick(() => this.plugin.publishActiveNote()),
+      )
+      .addButton((btn) =>
+        btn
           .setButtonText("Refresh")
           .setIcon("refresh-cw")
           .onClick(() => void this.renderPages()),
@@ -223,6 +231,19 @@ export class PublishSettingTab extends PluginSettingTab {
       });
 
       const actions = row.createEl("td", { cls: "op-actions-cell" });
+
+      const passwordBtn = actions.createEl("button", {
+        cls: "op-link-button op-password-button",
+        attr: {
+          "aria-label": page.password_protected ? "Replace password" : "Generate password",
+          title: page.password_protected ? "Replace password" : "Generate password",
+        },
+      });
+      setIcon(passwordBtn, "key-round");
+      passwordBtn.addEventListener("click", () => {
+        this.confirmGeneratePassword(page);
+      });
+
       const copyBtn = actions.createEl("button", {
         text: "Copy link",
         cls: "op-link-button",
@@ -255,6 +276,43 @@ export class PublishSettingTab extends PluginSettingTab {
     } else {
       new Notice(describeApiError(result.error), 8000);
     }
+    await this.renderPages();
+  }
+
+  // -- Per-row password action -------------------------------------------------
+
+  private confirmGeneratePassword(page: PageRecord): void {
+    if (page.password_protected) {
+      new ConfirmModal(this.app, {
+        title: `Replace password for /${page.route}?`,
+        body: `A new password will be generated for “${page.title}”. The old password stops working immediately and cannot be recovered — the server stores only a hash.`,
+        confirmText: "Replace password",
+        onConfirm: () => void this.generateAndSetPassword(page),
+      }).open();
+    } else {
+      new ConfirmModal(this.app, {
+        title: `Generate password for /${page.route}?`,
+        body: `“${page.title}” is currently public. Setting a password means readers will need it to view the page.`,
+        confirmText: "Generate password",
+        onConfirm: () => void this.generateAndSetPassword(page),
+      }).open();
+    }
+  }
+
+  /**
+   * Generate a CSPRNG password and push it as a password-only PUT — content,
+   * title, and theme are untouched. The plaintext exists only transiently:
+   * it is shown once in a modal and never stored or logged locally.
+   */
+  private async generateAndSetPassword(page: PageRecord): Promise<void> {
+    const password = generatePassword();
+    const result = await this.plugin.getClient().setPagePassword(page.route, password);
+    if (!result.ok) {
+      new Notice(describeApiError(result.error), 8000);
+      return;
+    }
+    await this.plugin.markRoutePasswordProtected(page.route, true);
+    new ShowPasswordModal(this.app, password).open();
     await this.renderPages();
   }
 

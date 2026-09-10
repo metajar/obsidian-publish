@@ -33,6 +33,8 @@ export default class SelfHostedPublishPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
 
+    this.addRibbonIcon("send", "Publish current note", () => this.publishActiveNote());
+
     this.addCommand({
       id: "publish-current-note",
       name: "Publish this note",
@@ -61,6 +63,16 @@ export default class SelfHostedPublishPlugin extends Plugin {
     this.addSettingTab(new PublishSettingTab(this.app, this));
   }
 
+  /** Publish entry point shared by the ribbon icon and the settings button. */
+  publishActiveNote(): void {
+    const file = this.app.workspace.getActiveFile();
+    if (!file || file.extension !== "md") {
+      new Notice("Publish: open a Markdown note first.");
+      return;
+    }
+    this.openPublishModal(file);
+  }
+
   openPublishModal(file: TFile): void {
     const client = this.getClient();
     const existing = this.getLocalRouteEntry(file.path);
@@ -79,6 +91,21 @@ export default class SelfHostedPublishPlugin extends Plugin {
   async rememberRoute(notePath: string, entry: NoteRouteEntry): Promise<void> {
     this.settings.noteRoutes[notePath] = entry;
     await this.saveSettings();
+  }
+
+  /**
+   * Update the protection flag on any local mapping pointing at `route`
+   * (after a settings-table password set/remove). Pre-fill convenience only.
+   */
+  async markRoutePasswordProtected(route: string, passwordProtected: boolean): Promise<void> {
+    let changed = false;
+    for (const entry of Object.values(this.settings.noteRoutes)) {
+      if (entry.route === route && entry.passwordProtected !== passwordProtected) {
+        entry.passwordProtected = passwordProtected;
+        changed = true;
+      }
+    }
+    if (changed) await this.saveSettings();
   }
 
   /** Drop any local mapping pointing at `route` (after unpublish/move). */
