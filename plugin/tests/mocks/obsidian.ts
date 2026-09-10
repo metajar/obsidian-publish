@@ -10,7 +10,8 @@ export type MockRequest = {
   url: string;
   method: string;
   headers?: Record<string, string>;
-  body?: string;
+  /** JSON payloads arrive as strings; multipart asset uploads as ArrayBuffer. */
+  body?: string | ArrayBuffer;
   throw?: boolean;
 };
 
