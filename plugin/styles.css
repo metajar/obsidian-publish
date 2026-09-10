@@ -32,6 +32,14 @@
   text-decoration: underline;
 }
 
+/* Settings: theme */
+.op-theme-css {
+  width: 100%;
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+  resize: vertical;
+}
+
 /* Settings: published pages */
 .op-pages-table {
   width: 100%;

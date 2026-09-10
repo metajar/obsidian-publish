@@ -3,12 +3,15 @@ import { requestUrl } from "obsidian";
 /**
  * Typed client for the self-hosted publish server.
  *
- * Implements the frozen API contract (PRD §10, minus theme):
+ * Implements the frozen API contract (PRD §10):
  *   GET    /api/routes/{route}/available
  *   POST   /api/pages
  *   PUT    /api/pages/{route}
  *   GET    /api/pages
  *   DELETE /api/pages/{route}
+ *   GET    /api/theme
+ *   POST   /api/theme
+ *   POST   /api/assets   (multipart; images only)
  *
  * Every request carries `Authorization: Bearer <token>`. Every method returns
  * a discriminated `ApiResult` — errors are mapped to `ApiError` and never
@@ -39,37 +42,67 @@ export interface PublishPageInput {
   password?: string | null;
 }
 
+/** Site theme as stored on the server (frozen contract: GET /api/theme). */
+export interface ThemeRecord {
+  css: string;
+  name: string;
+  updated_at: string;
+}
+
+/** Result of a successful asset upload (frozen contract: POST /api/assets). */
+export interface AssetUploadResult {
+  url: string;
+  filename: string;
+}
+
+/** Local file to upload via POST /api/assets. */
+export interface AssetUploadInput {
+  /** File name as sent to the server, e.g. "screenshot.png". */
+  filename: string;
+  mime: string;
+  data: ArrayBuffer;
+}
+
 export type ApiError =
   | { kind: "bad-config"; message: string }
   | { kind: "unauthorized"; status: number }
   | { kind: "route-taken"; status: number; message?: string }
   | { kind: "invalid-route"; status: number; message?: string }
   | { kind: "not-found"; status: number }
+  | { kind: "asset-rejected"; status: number; message?: string }
+  | { kind: "asset-too-large"; status: number; message?: string }
   | { kind: "server-error"; status: number; message?: string }
   | { kind: "unreachable"; message: string }
   | { kind: "unknown"; message: string };
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 
-/** Human-readable message for an ApiError, suitable for a Notice. */
-export function describeApiError(error: ApiError): string {
+/**
+ * Human-readable message for an ApiError, suitable for a Notice.
+ * `context` labels the action that failed (default "Publish").
+ */
+export function describeApiError(error: ApiError, context = "Publish"): string {
   switch (error.kind) {
     case "bad-config":
-      return `Publish: ${error.message}`;
+      return `${context}: ${error.message}`;
     case "unauthorized":
-      return "Publish: invalid API token — check it in Publish plugin settings.";
+      return `${context}: invalid API token — check it in Publish plugin settings.`;
     case "route-taken":
-      return `Publish: that route is already taken. ${error.message ?? ""}`.trim();
+      return `${context}: that route is already taken. ${error.message ?? ""}`.trim();
     case "invalid-route":
-      return `Publish: server rejected the route. ${error.message ?? ""}`.trim();
+      return `${context}: server rejected the route. ${error.message ?? ""}`.trim();
     case "not-found":
-      return "Publish: page not found on the server — it may have been unpublished elsewhere.";
+      return `${context}: page not found on the server — it may have been unpublished elsewhere.`;
+    case "asset-rejected":
+      return `${context}: the server rejected the file (images only — png/jpg/jpeg/gif/webp). ${error.message ?? ""}`.trim();
+    case "asset-too-large":
+      return `${context}: the file is too large (max 10 MB). ${error.message ?? ""}`.trim();
     case "server-error":
-      return `Publish: server error (${error.status}). ${error.message ?? ""}`.trim();
+      return `${context}: server error (${error.status}). ${error.message ?? ""}`.trim();
     case "unreachable":
-      return `Publish: could not reach the server — is it running, and is the URL correct? (${error.message})`;
+      return `${context}: could not reach the server — is it running, and is the URL correct? (${error.message})`;
     case "unknown":
-      return `Publish: unexpected error — ${error.message}`;
+      return `${context}: unexpected error — ${error.message}`;
   }
 }
 
@@ -208,6 +241,110 @@ export class PublishApiClient {
     return { ok: true, data: null };
   }
 
+  // -- Theme -------------------------------------------------------------------
+
+  /**
+   * Fetch the current site theme. An unset theme is reported by the server as
+   * `{"css": "", "name": "default", ...}` and returned as-is.
+   */
+  async getTheme(): Promise<ApiResult<ThemeRecord>> {
+    const res = await this.request({ method: "GET", path: "/api/theme" });
+    if (!res.ok) return res;
+    return this.expectTheme(res, { css: "", name: "default", updated_at: "" });
+  }
+
+  /** Set the site theme. Arbitrary CSS is allowed (self-hosted, single user). */
+  async setTheme(css: string, name?: string): Promise<ApiResult<ThemeRecord>> {
+    const payload: Record<string, unknown> = { css };
+    if (name !== undefined) payload["name"] = name;
+    const res = await this.request({ method: "POST", path: "/api/theme", body: payload });
+    if (!res.ok) return res;
+    // Tolerate a body-less 2xx: echo back what we sent.
+    return this.expectTheme(res, { css, name: name ?? "custom", updated_at: "" });
+  }
+
+  private expectTheme(res: ApiResult<RawResponse>, fallback: ThemeRecord): ApiResult<ThemeRecord> {
+    if (!res.ok) return res;
+    const body = res.data.json;
+    if (body !== null && typeof body["css"] === "string" && typeof body["name"] === "string") {
+      return {
+        ok: true,
+        data: {
+          css: body["css"] as string,
+          name: body["name"] as string,
+          updated_at: typeof body["updated_at"] === "string" ? (body["updated_at"] as string) : "",
+        },
+      };
+    }
+    if (!res.data.text.trim()) return { ok: true, data: fallback };
+    return {
+      ok: false,
+      error: { kind: "unknown", message: "server returned a malformed theme response" },
+    };
+  }
+
+  // -- Assets ------------------------------------------------------------------
+
+  /**
+   * Upload an image via POST /api/assets (multipart form, field `file`).
+   * 201 on first upload; 200 with the same body on a dedupe re-upload — both
+   * are success. 400 (non-image/svg) and 413 (oversize) map to dedicated
+   * error kinds so callers can fail soft with a precise message.
+   */
+  async uploadAsset(input: AssetUploadInput): Promise<ApiResult<AssetUploadResult>> {
+    const base = this.baseUrl.trim().replace(/\/+$/, "");
+    if (!base || !this.token.trim()) {
+      return {
+        ok: false,
+        error: {
+          kind: "bad-config",
+          message: "server URL and API token must be set in the Publish plugin settings first.",
+        },
+      };
+    }
+
+    const body = buildMultipartBody(input);
+    try {
+      const res = await requestUrl({
+        url: `${base}/api/assets`,
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.token.trim()}`,
+          "Content-Type": `multipart/form-data; boundary=${MULTIPART_BOUNDARY}`,
+        },
+        body,
+        throw: false,
+      });
+      if (res.status !== 200 && res.status !== 201) {
+        return { ok: false, error: mapAssetStatus(res.status, errorBodyMessage(res)) };
+      }
+      const json = safeJson(res);
+      const url = json?.["url"];
+      const filename = json?.["filename"];
+      if (typeof url !== "string" || typeof filename !== "string") {
+        return {
+          ok: false,
+          error: { kind: "unknown", message: "server returned a malformed asset response" },
+        };
+      }
+      return { ok: true, data: { url, filename } };
+    } catch (err) {
+      // requestUrl on some builds rejects with an Error carrying `status`;
+      // run those through the asset-specific mapping too.
+      const status =
+        typeof err === "object" && err !== null && "status" in err && typeof (err as { status: unknown }).status === "number"
+          ? (err as { status: number }).status
+          : null;
+      if (status !== null) {
+        return {
+          ok: false,
+          error: mapAssetStatus(status, err instanceof Error ? err.message : undefined),
+        };
+      }
+      return { ok: false, error: mapError(err) };
+    }
+  }
+
   private async expectPage(res: ApiResult<RawResponse>): Promise<ApiResult<PageRecord>> {
     if (!res.ok) return res;
     const body = res.data.json;
@@ -260,6 +397,47 @@ export class PublishApiClient {
       return { ok: false, error: mapError(err) };
     }
   }
+}
+
+// -- Multipart helpers (POST /api/assets) -----------------------------------
+
+/** Fixed boundary; CSS-free and improbable inside any uploaded image bytes. */
+const MULTIPART_BOUNDARY = "----obsidian-publish-7f3a9b";
+
+/**
+ * Build a `multipart/form-data` body with a single `file` field, as an
+ * ArrayBuffer so binary image data passes through requestUrl byte-exact.
+ * Exported for unit testing the wire shape.
+ */
+export function buildMultipartBody(input: AssetUploadInput): ArrayBuffer {
+  const encoder = new TextEncoder();
+  // Escape quotes/newlines per RFC 7578 §4.2 so hostile filenames can't
+  // smuggle extra parts.
+  const safeName = input.filename.replace(/["\r\n]/g, "_");
+  const head = encoder.encode(
+    `--${MULTIPART_BOUNDARY}\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="${safeName}"\r\n` +
+      `Content-Type: ${input.mime}\r\n` +
+      `\r\n`,
+  );
+  const tail = encoder.encode(`\r\n--${MULTIPART_BOUNDARY}--\r\n`);
+  const data = new Uint8Array(input.data);
+
+  const out = new Uint8Array(head.length + data.length + tail.length);
+  out.set(head, 0);
+  out.set(data, head.length);
+  out.set(tail, head.length + data.length);
+  return out.buffer;
+}
+
+/**
+ * Status mapping specific to asset uploads: 400 is a rejected file (not an
+ * invalid route) and 413 is oversize. Everything else defers to mapStatus.
+ */
+function mapAssetStatus(status: number, message?: string): ApiError {
+  if (status === 400) return { kind: "asset-rejected", status, message };
+  if (status === 413) return { kind: "asset-too-large", status, message };
+  return mapStatus(status, message);
 }
 
 function safeJson(res: { json?: unknown; text: string }): Record<string, unknown> | null {

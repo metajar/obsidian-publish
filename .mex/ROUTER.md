@@ -16,7 +16,7 @@ edges:
     condition: when touching token auth, password gating, sessions, or rate limiting
   - target: patterns/INDEX.md
     condition: when starting a task — check the pattern index for a matching pattern file
-last_updated: 2026-09-10
+last_updated: 2026-09-10 (plugin: theme settings + image publishing)
 ---
 
 # Session Bootstrap
@@ -30,13 +30,12 @@ Then read this file fully before doing anything else in this session.
 **Working:**
 - `PRD.md` — complete product spec (scope, flows, requirements, API sketch)
 - Go server (`server/`, Go module `obsidian-publish/server`): publish/update/delete/list + route-availability APIs behind bearer-token middleware, public page serving with password gate, argon2id hashing, route-scoped HMAC session cookies, per-IP+route rate limiting, SQLite (modernc, pure-Go) persistence, goldmark rendering at publish time. `go build/vet/test ./...` all pass from `server/`.
-- Obsidian plugin (`plugin/`): publish command (palette + editor context menu), publish modal (slug prefill, debounced availability check, CSPRNG password generation, update-mode password semantics), settings tab (server URL + masked token, test connection, live published-pages table with confirmed unpublish + copy link). `npm run build` clean (zero TS errors), 37/37 vitest tests pass.
+- Obsidian plugin (`plugin/`): publish command (palette + editor context menu), publish modal (slug prefill, debounced availability check, CSPRNG password generation, update-mode password semantics), settings tab (server URL + masked token, test connection, live published-pages table with confirmed unpublish + copy link, theme section with 4 built-in presets + custom CSS pushed via POST /api/theme, loaded live via GET /api/theme), image publishing on publish/re-publish (wiki `![[img.png|400]]` and local `![alt](path.png)` embeds uploaded via POST /api/assets and rewritten to server URLs in the outbound payload only — the note on disk is never modified; remote images, non-image attachments reported via Notice, upload failures fail soft, dedupe per vault file). `npm run build` clean (zero TS errors), 85/85 vitest tests pass.
 - End-to-end smoke (2026-09-10, `main` after merge): 401 without token → publish → serve → password gate (form-only pre-auth, 401 wrong password, 303+cookie correct, content only with cookie) → list (no hash exposure) → delete → 404. All passed.
 - API contract frozen between plugin and server: bare-array `GET /api/pages`, `DELETE`→204, PUT password omitted=keep / null=remove / string=set, 401/409/400/404 error mapping.
 
 **Not yet built:**
-- Theming (v2 — `POST /api/theme` deliberately skipped in MVP server)
-- Asset/image publishing (fast-follow)
+- Theming + asset endpoints on the server (`GET/POST /api/theme`, `POST /api/assets`) — plugin side is built against the frozen contract; server implementation is in progress in parallel
 - Deployment setup (Cloudflare Tunnel or droplet — owner's choice at deploy time; systemd unit/container not yet written)
 - Plugin↔server integration test inside Obsidian itself (plugin built against the frozen contract; verified by unit tests + server-side e2e only)
 

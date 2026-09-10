@@ -2,9 +2,11 @@ import { App, Notice, PluginSettingTab, Setting, TextComponent } from "obsidian"
 import { describeApiError, PageRecord } from "./api";
 import { ConfirmModal } from "./confirmModal";
 import type SelfHostedPublishPlugin from "./main";
+import { THEME_PRESETS } from "./themePresets";
 
 export class PublishSettingTab extends PluginSettingTab {
   private pagesContainerEl: HTMLElement | null = null;
+  private themeCssTextarea: HTMLTextAreaElement | null = null;
 
   constructor(app: App, private readonly plugin: SelfHostedPublishPlugin) {
     super(app, plugin);
@@ -14,8 +16,10 @@ export class PublishSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.addClass("op-settings");
+    this.themeCssTextarea = null;
 
     this.renderConnectionSection(containerEl);
+    this.renderThemeSection(containerEl);
     this.renderPagesSection(containerEl);
   }
 
@@ -70,6 +74,77 @@ export class PublishSettingTab extends PluginSettingTab {
           }
         }),
     );
+  }
+
+  // -- Theme -------------------------------------------------------------------
+
+  private renderThemeSection(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName("Theme")
+      .setDesc(
+        "Site-wide: this CSS is applied to every published page. The password prompt page always keeps the default stylesheet.",
+      )
+      .setHeading();
+
+    new Setting(containerEl)
+      .setName("Preset")
+      .setDesc("Picking a preset fills the editor below — edit it freely or write your own CSS.")
+      .addDropdown((drop) => {
+        for (const preset of THEME_PRESETS) {
+          drop.addOption(preset.id, preset.name);
+        }
+        drop.setValue(THEME_PRESETS[0].id);
+        drop.onChange((id: string) => {
+          const preset = THEME_PRESETS.find((p) => p.id === id);
+          if (preset && this.themeCssTextarea) this.themeCssTextarea.value = preset.css;
+        });
+      });
+
+    const cssSetting = new Setting(containerEl)
+      .setName("Custom CSS")
+      .setDesc("Loaded live from the server when settings open.");
+    cssSetting.addTextArea((ta) => {
+      ta.setPlaceholder("/* custom CSS — starts empty until you save a theme */");
+      ta.inputEl.rows = 12;
+      ta.inputEl.addClass("op-theme-css");
+      this.themeCssTextarea = ta.inputEl;
+    });
+
+    // Current theme always comes from the server, never local state.
+    void this.loadTheme();
+
+    new Setting(containerEl).addButton((btn) =>
+      btn
+        .setButtonText("Save & push to server")
+        .setCta()
+        .onClick(async () => {
+          const css = this.themeCssTextarea?.value ?? "";
+          btn.setDisabled(true);
+          try {
+            const name = THEME_PRESETS.find((p) => p.css === css)?.name ?? "custom";
+            const result = await this.plugin.getClient().setTheme(css, name);
+            if (result.ok) {
+              new Notice("Theme saved — it now applies to every published page.");
+            } else {
+              new Notice(describeApiError(result.error, "Theme"), 8000);
+            }
+          } finally {
+            btn.setDisabled(false);
+          }
+        }),
+    );
+  }
+
+  private async loadTheme(): Promise<void> {
+    const result = await this.plugin.getClient().getTheme();
+    const textarea = this.themeCssTextarea;
+    if (!textarea) return; // settings were closed while loading
+    if (result.ok) {
+      textarea.value = result.data.css;
+    } else {
+      // Leave the editor empty and say why — distinct Notices per error kind.
+      new Notice(describeApiError(result.error, "Theme"), 8000);
+    }
   }
 
   // -- Published pages ---------------------------------------------------------

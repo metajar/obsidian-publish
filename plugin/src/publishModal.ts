@@ -1,5 +1,6 @@
 import { App, ButtonComponent, Modal, Notice, Setting, TFile, TextComponent } from "obsidian";
 import { describeApiError, PageRecord, PublishApiClient } from "./api";
+import { publishNoteImages, type ImagePublishOutcome } from "./imagePublisher";
 import type SelfHostedPublishPlugin from "./main";
 import { isValidRoute, slugify } from "./slug";
 
@@ -272,10 +273,20 @@ export class PublishModal extends Modal {
             ? null
             : undefined; // "keep" (protected update) or "none" (unprotected)
 
+      // Upload embedded images and rewrite the embeds to server URLs in the
+      // outbound payload. The note on disk is never modified (see
+      // imagePublisher.ts). Failures fail soft — publishing continues.
+      const images = await publishNoteImages({
+        markdown,
+        vault: this.plugin.app.vault,
+        client: this.client,
+        baseUrl: this.plugin.settings.serverUrl,
+      });
+
       const isUpdate = this.existing !== null && this.route === this.existing.route;
       const result = isUpdate
-        ? await this.client.updatePage(this.route, { title, markdown, password })
-        : await this.client.createPage(this.route, { title, markdown, password: password ?? undefined });
+        ? await this.client.updatePage(this.route, { title, markdown: images.markdown, password })
+        : await this.client.createPage(this.route, { title, markdown: images.markdown, password: password ?? undefined });
 
       if (!result.ok) {
         new Notice(describeApiError(result.error), 8000);
@@ -302,10 +313,27 @@ export class PublishModal extends Modal {
 
       const url = this.liveUrl(result.data);
       new Notice(`Published: /${this.route}`);
+      this.showAttachmentNotices(images);
       new CopyLinkModal(this.app, url).open();
       this.close();
     } finally {
       this.submitting = false;
+    }
+  }
+
+  /** Post-publish feedback for embedded attachments (both are advisory only). */
+  private showAttachmentNotices(images: ImagePublishOutcome): void {
+    if (images.nonImageCount > 0) {
+      new Notice(
+        `Publish: ${images.nonImageCount} non-image attachment${images.nonImageCount === 1 ? " was" : "s were"} not published.`,
+        8000,
+      );
+    }
+    if (images.failed.length > 0) {
+      new Notice(
+        `Publish: ${images.failed.length} image${images.failed.length === 1 ? "" : "s"} could not be uploaded and ${images.failed.length === 1 ? "was" : "were"} left as vault embeds — ${images.failed.join(", ")}`,
+        10000,
+      );
     }
   }
 

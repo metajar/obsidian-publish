@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { PublishApiClient } from "../src/api";
+import { describeApiError, PublishApiClient } from "../src/api";
 import { __setRequestUrlHandler, type MockRequest } from "./mocks/obsidian";
 
 const BASE = "https://notes.example.com";
@@ -39,6 +39,13 @@ function httpError(status: number, message?: string): void {
 beforeEach(() => {
   lastRequest = null;
 });
+
+/** Parse the last JSON request body (asset uploads send ArrayBuffer instead). */
+function jsonBody(): Record<string, unknown> {
+  const body = lastRequest?.body;
+  if (typeof body !== "string") throw new Error("expected a JSON (string) request body");
+  return JSON.parse(body);
+}
 
 describe("PublishApiClient — auth and URL construction", () => {
   it("sends the bearer token on every request and normalizes the base URL", async () => {
@@ -113,7 +120,7 @@ describe("PublishApiClient — createPage", () => {
     expect(result.ok).toBe(true);
     expect(lastRequest?.method).toBe("POST");
     expect(lastRequest?.url).toBe(`${BASE}/api/pages`);
-    const body = JSON.parse(lastRequest?.body ?? "{}");
+    const body = jsonBody();
     expect(body).toEqual({ route: "my-note", title: "My Note", markdown: "# Hello" });
     expect("password" in body).toBe(false);
   });
@@ -126,7 +133,7 @@ describe("PublishApiClient — createPage", () => {
       password: "hunter2",
     });
     expect(result.ok).toBe(true);
-    const body = JSON.parse(lastRequest?.body ?? "{}");
+    const body = jsonBody();
     expect(body.password).toBe("hunter2");
   });
 
@@ -155,7 +162,7 @@ describe("PublishApiClient — updatePage", () => {
     expect(result.ok).toBe(true);
     expect(lastRequest?.method).toBe("PUT");
     expect(lastRequest?.url).toBe(`${BASE}/api/pages/my-note`);
-    const body = JSON.parse(lastRequest?.body ?? "{}");
+    const body = jsonBody();
     expect("password" in body).toBe(false);
   });
 
@@ -167,14 +174,14 @@ describe("PublishApiClient — updatePage", () => {
       password: null,
     });
     expect(result.ok).toBe(true);
-    const body = JSON.parse(lastRequest?.body ?? "{}");
+    const body = jsonBody();
     expect(body.password).toBeNull();
   });
 
   it("sends a string password to set or replace one", async () => {
     reply(200, { route: "my-note", title: "t", created_at: "", updated_at: "", password_protected: true });
     await client().updatePage("my-note", { title: "t", markdown: "m", password: "new-pass" });
-    const body = JSON.parse(lastRequest?.body ?? "{}");
+    const body = jsonBody();
     expect(body.password).toBe("new-pass");
   });
 
@@ -258,5 +265,170 @@ describe("PublishApiClient — transport failures", () => {
     const result = await client().listPages();
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe("unauthorized");
+  });
+});
+
+describe("PublishApiClient — getTheme", () => {
+  it("GETs /api/theme and parses the record", async () => {
+    reply(200, { css: "body { color: red; }", name: "warm", updated_at: "2026-09-10T00:00:00Z" });
+    const result = await client().getTheme();
+    expect(lastRequest?.method).toBe("GET");
+    expect(lastRequest?.url).toBe(`${BASE}/api/theme`);
+    expect(result).toEqual({
+      ok: true,
+      data: { css: "body { color: red; }", name: "warm", updated_at: "2026-09-10T00:00:00Z" },
+    });
+  });
+
+  it("returns the empty default theme as-is when no theme is set", async () => {
+    reply(200, { css: "", name: "default", updated_at: "" });
+    const result = await client().getTheme();
+    expect(result).toEqual({ ok: true, data: { css: "", name: "default", updated_at: "" } });
+  });
+
+  it("maps 401 to unauthorized", async () => {
+    httpError(401);
+    const result = await client().getTheme();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("unauthorized");
+  });
+});
+
+describe("PublishApiClient — setTheme", () => {
+  it("POSTs {css, name} to /api/theme", async () => {
+    reply(200, { css: "a{}", name: "custom", updated_at: "2026-09-10T00:00:00Z" });
+    const result = await client().setTheme("a{}", "warm");
+    expect(result.ok).toBe(true);
+    expect(lastRequest?.method).toBe("POST");
+    expect(lastRequest?.url).toBe(`${BASE}/api/theme`);
+    expect(lastRequest?.headers?.["Content-Type"]).toBe("application/json");
+    expect(jsonBody()).toEqual({ css: "a{}", name: "warm" });
+  });
+
+  it("omits name when not supplied", async () => {
+    reply(200, { css: "a{}", name: "custom", updated_at: "" });
+    await client().setTheme("a{}");
+    const body = jsonBody();
+    expect(body).toEqual({ css: "a{}" });
+    expect("name" in body).toBe(false);
+  });
+
+  it("echoes the input when the server replies 2xx without a body", async () => {
+    reply(204, undefined, "");
+    const result = await client().setTheme("a{}", "warm");
+    expect(result).toEqual({ ok: true, data: { css: "a{}", name: "warm", updated_at: "" } });
+  });
+
+  it("rejects a malformed theme body", async () => {
+    reply(200, { surprise: true });
+    const result = await client().setTheme("a{}");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("unknown");
+  });
+
+  it("maps 401 to unauthorized (invalid token feedback for the theme section)", async () => {
+    httpError(401);
+    const result = await client().setTheme("a{}");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("unauthorized");
+  });
+});
+
+describe("PublishApiClient — uploadAsset", () => {
+  const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const input = { filename: "shot.png", mime: "image/png", data: PNG_BYTES.slice().buffer };
+
+  function bodyText(): string {
+    expect(lastRequest?.body).toBeInstanceOf(ArrayBuffer);
+    return new TextDecoder("latin1").decode(lastRequest?.body as ArrayBuffer);
+  }
+
+  it("sends a multipart body with a `file` field and the image bytes", async () => {
+    reply(201, { url: "/assets/abc.png", filename: "abc.png" });
+    const result = await client().uploadAsset(input);
+    expect(result).toEqual({ ok: true, data: { url: "/assets/abc.png", filename: "abc.png" } });
+    expect(lastRequest?.method).toBe("POST");
+    expect(lastRequest?.url).toBe(`${BASE}/api/assets`);
+    expect(lastRequest?.headers?.["Authorization"]).toBe(`Bearer ${TOKEN}`);
+
+    const contentType = lastRequest?.headers?.["Content-Type"] ?? "";
+    expect(contentType).toMatch(/^multipart\/form-data; boundary=/);
+    const boundary = contentType.split("boundary=")[1];
+
+    const body = bodyText();
+    expect(body.startsWith(`--${boundary}\r\n`)).toBe(true);
+    expect(body).toContain('Content-Disposition: form-data; name="file"; filename="shot.png"');
+    expect(body).toContain("Content-Type: image/png");
+    // Binary payload arrives byte-exact between the blank line and the tail.
+    const payloadStart = body.indexOf("\r\n\r\n") + 4;
+    const payloadEnd = body.indexOf(`\r\n--${boundary}--`);
+    expect(body.slice(payloadStart, payloadEnd)).toBe(new TextDecoder("latin1").decode(PNG_BYTES));
+  });
+
+  it("treats a 200 dedupe re-upload as success with the same body", async () => {
+    reply(200, { url: "/assets/existing.png", filename: "existing.png" });
+    const result = await client().uploadAsset(input);
+    expect(result).toEqual({ ok: true, data: { url: "/assets/existing.png", filename: "existing.png" } });
+  });
+
+  it("maps 400 (non-image/svg rejection) to asset-rejected", async () => {
+    reply(400, { error: "svg not allowed" });
+    const result = await client().uploadAsset(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("asset-rejected");
+      if (result.error.kind === "asset-rejected") expect(result.error.message).toBe("svg not allowed");
+    }
+  });
+
+  it("maps 413 (oversize) to asset-too-large", async () => {
+    httpError(413, "file too large"); // thrown-with-status variant must map too
+    const result = await client().uploadAsset(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("asset-too-large");
+  });
+
+  it("maps 413 the same way when resolved rather than thrown", async () => {
+    reply(413, { error: "too large" });
+    const result = await client().uploadAsset(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("asset-too-large");
+  });
+
+  it("maps connection failures to unreachable", async () => {
+    networkError();
+    const result = await client().uploadAsset(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("unreachable");
+  });
+
+  it("rejects a malformed asset response", async () => {
+    reply(201, { nope: true });
+    const result = await client().uploadAsset(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("unknown");
+  });
+
+  it("fails fast with bad-config when the token is missing", async () => {
+    const result = await new PublishApiClient(BASE, " ").uploadAsset(input);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("bad-config");
+  });
+});
+
+describe("describeApiError — Notices for the theme section", () => {
+  it("labels messages with the failing action's context", () => {
+    expect(describeApiError({ kind: "unauthorized", status: 401 }, "Theme")).toBe(
+      "Theme: invalid API token — check it in Publish plugin settings.",
+    );
+    expect(describeApiError({ kind: "unreachable", message: "refused" }, "Theme")).toContain(
+      "Theme: could not reach the server",
+    );
+    expect(describeApiError({ kind: "unauthorized", status: 401 })).toContain("Publish: invalid API token");
+  });
+
+  it("describes the asset-specific error kinds", () => {
+    expect(describeApiError({ kind: "asset-rejected", status: 400 })).toContain("images only");
+    expect(describeApiError({ kind: "asset-too-large", status: 413 })).toContain("max 10 MB");
   });
 });
