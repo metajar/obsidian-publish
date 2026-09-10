@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"obsidian-publish/server/internal/assets"
 	"obsidian-publish/server/internal/ratelimit"
 	"obsidian-publish/server/internal/session"
 	"obsidian-publish/server/internal/store"
@@ -36,6 +37,10 @@ func newTestServer(t *testing.T) *testServer {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
+	assetStore, err := assets.Open(filepath.Join(t.TempDir(), "assets"))
+	if err != nil {
+		t.Fatalf("assets.Open: %v", err)
+	}
 	sessions, err := session.NewManager([]byte("test-secret-0123456789abcdef"), time.Hour)
 	if err != nil {
 		t.Fatalf("session.NewManager: %v", err)
@@ -46,6 +51,7 @@ func newTestServer(t *testing.T) *testServer {
 		Sessions: sessions,
 		Limiter:  ratelimit.New(5, time.Minute),
 		BaseURL:  "https://notes.example.com",
+		Assets:   assetStore,
 		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	return &testServer{e: e, s: srv, dbPath: dbPath}

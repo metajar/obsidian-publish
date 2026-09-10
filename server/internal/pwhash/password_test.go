@@ -64,8 +64,14 @@ func TestVerifyTamperedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	// Flip last char of the key component.
-	tampered := h[:len(h)-1] + string(rune('A'+'Z'-h[len(h)-1]))
+	// Flip the last char of the key component to a different valid base64
+	// char (a mirror flip could land outside the alphabet and turn this into
+	// a parse-error test instead).
+	repl := byte('A')
+	if h[len(h)-1] == 'A' {
+		repl = 'B'
+	}
+	tampered := h[:len(h)-1] + string(repl)
 	ok, err := Verify("password", tampered)
 	if err != nil {
 		t.Fatalf("Verify tampered returned err: %v", err)

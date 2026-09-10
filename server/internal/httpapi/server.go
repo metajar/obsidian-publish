@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"obsidian-publish/server/internal/assets"
 	"obsidian-publish/server/internal/ratelimit"
 	"obsidian-publish/server/internal/session"
 	"obsidian-publish/server/internal/store"
@@ -26,6 +27,7 @@ type Deps struct {
 	Sessions *session.Manager
 	Limiter  *ratelimit.Limiter
 	BaseURL  string // optional; empty = derive live URLs from request Host
+	Assets   *assets.Store
 	Log      *slog.Logger
 }
 
@@ -49,8 +51,13 @@ func New(d Deps) (*echo.Echo, *Server) {
 	api.GET("/pages", s.listPages)
 	api.PUT("/pages/:route", s.updatePage)
 	api.DELETE("/pages/:route", s.deletePage)
+	api.GET("/theme", s.getTheme)
+	api.POST("/theme", s.setTheme)
+	api.POST("/assets", s.uploadAsset)
 
-	// Public reader plane: no token, page password gate only.
+	// Public reader plane: no token, page password gate only. Assets are
+	// public and immutable (content-addressed), served from the assets dir.
+	e.GET("/assets/:filename", s.serveAsset)
 	e.GET("/:route", s.servePage)
 	e.POST("/:route/auth", s.pageAuth)
 

@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"obsidian-publish/server/internal/assets"
 	"obsidian-publish/server/internal/config"
 	"obsidian-publish/server/internal/httpapi"
 	"obsidian-publish/server/internal/ratelimit"
@@ -82,6 +83,11 @@ func run(args []string) error {
 	}
 	defer pages.Close()
 
+	assetStore, err := assets.Open(cfg.AssetsDir)
+	if err != nil {
+		return err
+	}
+
 	sessions, err := session.NewManager([]byte(secretStr), time.Hour)
 	if err != nil {
 		return err
@@ -94,6 +100,7 @@ func run(args []string) error {
 		Sessions: sessions,
 		Limiter:  limiter,
 		BaseURL:  cfg.BaseURL,
+		Assets:   assetStore,
 		Log:      log,
 	})
 

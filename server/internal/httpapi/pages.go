@@ -23,6 +23,7 @@ type createPageRequest struct {
 	Markdown     string  `json:"markdown"`
 	Password     *string `json:"password"` // nil or "" = unprotected
 	SourceNoteID string  `json:"source_note_id"`
+	ThemeCSS     string  `json:"theme_css"` // optional; non-empty overrides the global theme
 }
 
 // updatePageRequest is the PUT /api/pages/{route} payload. Absent fields are
@@ -32,10 +33,11 @@ type updatePageRequest struct {
 	Markdown     *string        `json:"markdown"`
 	Password     OptionalString `json:"password"`
 	SourceNoteID OptionalString `json:"source_note_id"`
+	ThemeCSS     OptionalString `json:"theme_css"` // absent = keep; null or "" = clear override
 }
 
 // pageResponse is the API projection of a page. It never contains the
-// password hash or page content.
+// password hash, page content, or theme CSS.
 type pageResponse struct {
 	Route             string `json:"route"`
 	Title             string `json:"title"`
@@ -43,6 +45,7 @@ type pageResponse struct {
 	UpdatedAt         string `json:"updated_at"`
 	PasswordProtected bool   `json:"password_protected"`
 	SourceNoteID      string `json:"source_note_id,omitempty"`
+	ThemeOverride     bool   `json:"theme_override"`
 	URL               string `json:"url"`
 }
 
@@ -92,6 +95,9 @@ func (s *Server) createPage(c echo.Context) error {
 	if !store.ValidRoute(req.Route) {
 		return echo.NewHTTPError(http.StatusBadRequest, "route must be a URL-safe slug: 1-64 chars of lowercase letters, digits, hyphens; must start and end alphanumeric; some names are reserved")
 	}
+	if len(req.ThemeCSS) > maxThemeCSS {
+		return echo.NewHTTPError(http.StatusBadRequest, "theme_css exceeds the 256 KB theme size limit")
+	}
 	if _, err := s.deps.Store.Get(req.Route); err == nil {
 		return echo.NewHTTPError(http.StatusConflict, "route already taken")
 	} else if !errors.Is(err, store.ErrNotFound) {
@@ -110,7 +116,7 @@ func (s *Server) createPage(c echo.Context) error {
 		}
 		passwordHash = hash
 	}
-	html, err := markdown.Document(title, req.Markdown)
+	html, err := markdown.Document(title, req.Markdown, s.effectiveCSS(req.ThemeCSS))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "markdown could not be rendered")
 	}
@@ -121,6 +127,7 @@ func (s *Server) createPage(c echo.Context) error {
 		ContentHTML:  html,
 		PasswordHash: passwordHash,
 		SourceNoteID: req.SourceNoteID,
+		ThemeCSS:     req.ThemeCSS,
 	}
 	if err := s.deps.Store.Create(page); err != nil {
 		if errors.Is(err, store.ErrConflict) {
@@ -167,18 +174,26 @@ func (s *Server) updatePage(c echo.Context) error {
 	if req.Title != nil {
 		title = *req.Title
 	}
+	themeCSS := page.ThemeCSS
+	if req.ThemeCSS.Present {
+		switch {
+		case req.ThemeCSS.Value == nil || *req.ThemeCSS.Value == "":
+			themeCSS = "" // explicit null (or empty string) clears the override
+		case len(*req.ThemeCSS.Value) > maxThemeCSS:
+			return echo.NewHTTPError(http.StatusBadRequest, "theme_css exceeds the 256 KB theme size limit")
+		default:
+			themeCSS = *req.ThemeCSS.Value
+		}
+	}
 	contentMD := page.ContentMD
 	contentHTML := page.ContentHTML
-	if req.Markdown != nil {
-		contentMD = *req.Markdown
-		html, rerr := markdown.Document(title, contentMD)
-		if rerr != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "markdown could not be rendered")
+	if req.Markdown != nil || (req.Title != nil && title != page.Title) || themeCSS != page.ThemeCSS {
+		// Content, title, or theme override changed: re-render with the
+		// effective stylesheet (per-page override > global theme > default).
+		if req.Markdown != nil {
+			contentMD = *req.Markdown
 		}
-		contentHTML = html
-	} else if req.Title != nil && title != page.Title {
-		// Title-only update: re-render so the stored document title matches.
-		html, rerr := markdown.Document(title, contentMD)
+		html, rerr := markdown.Document(title, contentMD, s.effectiveCSS(themeCSS))
 		if rerr != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "markdown could not be rendered")
 		}
@@ -204,7 +219,7 @@ func (s *Server) updatePage(c echo.Context) error {
 		}
 	}
 
-	updated, err := s.deps.Store.Update(route, title, contentMD, contentHTML, passwordHash, sourceNoteID)
+	updated, err := s.deps.Store.Update(route, title, contentMD, contentHTML, passwordHash, sourceNoteID, themeCSS)
 	if errors.Is(err, store.ErrNotFound) {
 		return echo.NewHTTPError(http.StatusNotFound, "no page published at this route")
 	}
@@ -237,6 +252,7 @@ func (s *Server) pageResponse(c echo.Context, p *store.Page) pageResponse {
 		UpdatedAt:         p.UpdatedAt.Format(timeFormat),
 		PasswordProtected: p.PasswordHash != "",
 		SourceNoteID:      p.SourceNoteID,
+		ThemeOverride:     p.ThemeCSS != "",
 		URL:               s.liveURL(c, p.Route),
 	}
 }

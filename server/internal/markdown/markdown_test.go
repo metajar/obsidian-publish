@@ -39,7 +39,7 @@ func TestRawHTMLNotRendered(t *testing.T) {
 }
 
 func TestDocumentStructure(t *testing.T) {
-	doc, err := Document("My <Title> & Such", "# Heading\n\nbody")
+	doc, err := Document("My <Title> & Such", "# Heading\n\nbody", "")
 	if err != nil {
 		t.Fatalf("Document: %v", err)
 	}
@@ -47,5 +47,28 @@ func TestDocumentStructure(t *testing.T) {
 		if !strings.Contains(doc, want) {
 			t.Errorf("document missing %q", want)
 		}
+	}
+}
+
+func TestDocumentThemePrecedence(t *testing.T) {
+	// Empty css = built-in default stylesheet.
+	doc, err := Document("T", "# H", "")
+	if err != nil {
+		t.Fatalf("Document: %v", err)
+	}
+	if !strings.Contains(doc, "color-scheme") {
+		t.Error("empty css did not fall back to the built-in default stylesheet")
+	}
+
+	// Non-empty css replaces the default entirely.
+	doc, err = Document("T", "# H", "body { color: purple; }")
+	if err != nil {
+		t.Fatalf("Document: %v", err)
+	}
+	if !strings.Contains(doc, "body { color: purple; }") {
+		t.Error("custom css missing from document")
+	}
+	if strings.Contains(doc, "color-scheme") {
+		t.Error("custom css did not replace the default stylesheet")
 	}
 }
