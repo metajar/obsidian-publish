@@ -44,6 +44,7 @@ Environment=OBSPUB_ADDR=127.0.0.1:8080
 Environment=OBSPUB_DB=/var/lib/obsidian-publish/obsidian-publish.db
 Environment=OBSPUB_TOKEN_FILE=/var/lib/obsidian-publish/api-token
 Environment=OBSPUB_SECRET_FILE=/var/lib/obsidian-publish/session-secret
+Environment=OBSPUB_ASSETS_DIR=/var/lib/obsidian-publish/assets
 
 # Optional overrides file (must exist; prefix '-' to tolerate absence).
 # Put ONLY non-secret overrides here, e.g. OBSPUB_BASE_URL. NEVER put real

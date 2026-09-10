@@ -29,7 +29,7 @@ Then read this file fully before doing anything else in this session.
 
 **Working:**
 - `PRD.md` — complete product spec (scope, flows, requirements, API sketch)
-- Go server (`server/`, Go module `obsidian-publish/server`): publish/update/delete/list + route-availability APIs behind bearer-token middleware, public page serving with password gate, argon2id hashing, route-scoped HMAC session cookies, per-IP+route rate limiting, SQLite (modernc, pure-Go) persistence, goldmark rendering at publish time. `go build/vet/test ./...` all pass from `server/`.
+- Go server (`server/`, Go module `obsidian-publish/server`): publish/update/delete/list + route-availability APIs behind bearer-token middleware, public page serving with password gate, argon2id hashing, route-scoped HMAC session cookies, per-IP+route rate limiting, SQLite (modernc, pure-Go) persistence, goldmark rendering at publish time; theming (`GET/POST /api/theme`, per-page `theme_css` override, precedence page > global > default, password form always unthemed) and assets (`POST /api/assets` multipart image-only ≤10 MB, content-hash dedupe, public `GET /assets/*` immutable cache; svg rejected). `go build/vet/test ./...` all pass from `server/`.
 - Obsidian plugin (`plugin/`): publish command (palette + editor context menu), publish modal (slug prefill, debounced availability check, CSPRNG password generation, update-mode password semantics), settings tab (server URL + masked token, test connection, live published-pages table with confirmed unpublish + copy link, theme section with 4 built-in presets + custom CSS pushed via POST /api/theme, loaded live via GET /api/theme), image publishing on publish/re-publish (wiki `![[img.png|400]]` and local `![alt](path.png)` embeds uploaded via POST /api/assets and rewritten to server URLs in the outbound payload only — the note on disk is never modified; remote images, non-image attachments reported via Notice, upload failures fail soft, dedupe per vault file). `npm run build` clean (zero TS errors), 85/85 vitest tests pass.
 - End-to-end smoke (2026-09-10, `main` after merge): 401 without token → publish → serve → password gate (form-only pre-auth, 401 wrong password, 303+cookie correct, content only with cookie) → list (no hash exposure) → delete → 404. All passed.
 - API contract frozen between plugin and server: bare-array `GET /api/pages`, `DELETE`→204, PUT password omitted=keep / null=remove / string=set, 401/409/400/404 error mapping.
@@ -39,7 +39,8 @@ Then read this file fully before doing anything else in this session.
 - Plugin↔server integration test inside Obsidian itself (plugin built against the frozen contract; verified by unit tests + server-side e2e only)
 
 **Known issues:**
-- Remaining open decisions in `context/decisions.md` are being closed in this integration (theming scope, route namespace, asset handling, custom CSS limits — all implemented or decided; see the decision log)
+- `HEAD /assets/{filename}` returns 405 (routes registered GET-only in Echo) — GET is correct; harmless for browsers, may surprise HTTP prefetchers
+- All PRD §14 open questions are now decided — see `context/decisions.md` (theming scope, route namespace, asset handling, custom CSS limits; session mechanism decided earlier)
 
 ## Routing Table
 

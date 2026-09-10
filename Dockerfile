@@ -55,7 +55,8 @@ EXPOSE 8080
 ENV OBSPUB_ADDR=:8080 \
     OBSPUB_DB=/data/obsidian-publish.db \
     OBSPUB_TOKEN_FILE=/data/api-token \
-    OBSPUB_SECRET_FILE=/data/session-secret
+    OBSPUB_SECRET_FILE=/data/session-secret \
+    OBSPUB_ASSETS_DIR=/data/assets
 
 USER nonroot:nonroot
 

@@ -93,8 +93,13 @@ last_updated: 2026-09-10
 **Alternatives considered:** Tunnel-only assumption (superseded — inbound ports on a user-controlled droplet are acceptable).
 **Consequences:** No code-level dependency on Cloudflare specifics; TLS termination strategy is a deployment concern, not an app concern.
 
-### [TO BE DETERMINED] Theming scope
-Pending: global site theme vs. per-page theme override (PRD §14.1 — spec leans global with optional per-page override). Decide before implementing theme storage/API.
+### Theming: global site theme + per-page CSS override
+**Date:** 2026-09-10
+**Status:** Active (resolves PRD §14.1)
+**Decision:** One global site theme (`GET/POST /api/theme`) plus an optional per-page `theme_css` override on publish/update; served precedence is per-page > global > built-in default, and the password-entry form always keeps the fixed default stylesheet.
+**Reasoning:** The PRD's stated lean; one theme keeps the reading experience coherent while the override covers occasional special pages; keeping the password form unthemed prevents an owner's CSS from breaking the only gate standing between readers and protected content.
+**Alternatives considered:** Per-page themes only (rejected — tedious for a personal site), separate theme objects referenced by id (rejected — YAGNI; a CSS string per page is enough at this scale).
+**Consequences:** Global theme changes re-render all non-override pages; plugin UI currently exposes only the site theme (per-page override is API-only). Custom CSS replaces the default entirely — owner's responsibility.
 
 ### Session mechanism: route-scoped HMAC-signed cookie
 **Date:** 2026-09-10
@@ -104,11 +109,26 @@ Pending: global site theme vs. per-page theme override (PRD §14.1 — spec lean
 **Alternatives considered:** Signed URL token (rejected — leaked when readers share the URL back; access should not be sticky to the link itself).
 **Consequences:** Rotating `data/session-secret` revokes all outstanding sessions. Supersedes the open question in PRD §14.4.
 
-### [TO BE DETERMINED] Route namespace
-Pending: flat routes vs. a fixed prefix like `/notes/{slug}` to avoid collisions with future server features (PRD §14.3). Decide before freezing the route table schema.
+### Route namespace: flat routes + reserved-route rejection
+**Date:** 2026-09-10
+**Status:** Active (resolves PRD §14.3)
+**Decision:** Published routes stay flat at the root (`/{route}`); collisions with server features are prevented by rejecting a reserved list (`api`, `assets`, `favicon.ico`, `robots.txt`) at validation.
+**Reasoning:** Flat URLs are what a personal publishing tool wants to share; the reserved list is a small, explicit surface that grows only when the server grows.
+**Alternatives considered:** Fixed prefix like `/notes/{slug}` (rejected — uglier shared URLs, solves a problem the reserved list already covers).
+**Consequences:** Any future server-owned top-level path MUST be added to the reserved list before it ships.
 
-### [TO BE DETERMINED] Asset/image handling
-Pending: how the plugin treats embedded images in MVP (strip, warn, or queue as fast-follow) (PRD §14.2). Out of scope for MVP publishing.
+### Asset/image publishing: upload at publish time, rewrite outbound only
+**Date:** 2026-09-10
+**Status:** Active (resolves PRD §14.2; the v2 "fast-follow" was pulled forward and implemented)
+**Decision:** On publish/re-publish the plugin uploads vault images (png/jpg/jpeg/gif/webp, ≤10 MB) via `POST /api/assets` and rewrites embeds to server asset URLs in the outbound payload only — the note on disk is never modified. SVG is rejected server-side (script-bearing XSS vector); non-image attachments are skipped with a summary notice; upload failures fail soft.
+**Reasoning:** Publishing must not mutate the vault; server-side validation (extension + magic bytes must agree) is defense in depth; immutable content-hash-deduped assets (`/assets/{hash16-name}`, immutable cache) keep serving trivial.
+**Alternatives considered:** Strip images (rejected — degrades notes), warn-only (rejected — that's what non-images do; images are the common case), rewriting the note file in place (rejected — mutates the vault).
+**Consequences:** Notes republished after editing an image re-upload and get a new URL (hash changes); the note in the vault keeps its original embeds, so re-publish always re-resolves.
 
-### [TO BE DETERMINED] Custom CSS limits
-Pending: arbitrary custom CSS in themes vs. preset list only (PRD §14.6 — low risk since self-hosted single-user).
+### Custom CSS: arbitrary, capped at 256 KB
+**Date:** 2026-09-10
+**Status:** Active (resolves PRD §14.6)
+**Decision:** Themes accept arbitrary custom CSS (site-wide and per-page), capped at 256 KB per theme. The plugin ships 4 presets but custom CSS is first-class.
+**Reasoning:** Self-hosted, single-owner — the only person the CSS can hurt is the owner. A preset-only list would fight the product's ownership promise.
+**Alternatives considered:** Preset list only (rejected — arbitrary limits on the owner's own site), sanitizing CSS (rejected — no robust CSS sanitizer; the trust boundary is the owner).
+**Consequences:** Raw HTML in Markdown stays disabled (goldmark unsafe off) — CSS is styling, HTML is code; only the former is allowed.

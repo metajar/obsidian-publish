@@ -44,11 +44,12 @@ last_updated: 2026-09-10
 
 ## Environment Variables
 
-Server config (flags > env > defaults; flags: `-addr`, `-db`, `-token-file`, `-secret-file`, `-base-url`):
+Server config (flags > env > defaults; flags: `-addr`, `-db`, `-token-file`, `-secret-file`, `-base-url`, `-assets-dir`):
 - `OBSPUB_ADDR` (optional) — listen address, default `:8080`
 - `OBSPUB_DB` (optional) — SQLite path, default `data/obsidian-publish.db`
 - `OBSPUB_TOKEN_FILE` (optional) — API token file, default `data/api-token` (0600)
 - `OBSPUB_SECRET_FILE` (optional) — session-signing secret, default `data/session-secret` (0600)
+- `OBSPUB_ASSETS_DIR` (optional) — uploaded image storage, default `data/assets`; the systemd unit and Dockerfile pin it inside their state dirs — any new deployment config must do the same or assets land outside the state directory
 - `OBSPUB_BASE_URL` (optional) — base for live URLs returned on publish; defaults to request Host
 
 ## Common Commands
