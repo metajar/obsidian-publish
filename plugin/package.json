@@ -1,6 +1,6 @@
 {
   "name": "obsidian-publish-plugin",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Publish Obsidian notes to a self-hosted server behind an authenticated API.",
   "main": "main.js",
   "type": "module",
