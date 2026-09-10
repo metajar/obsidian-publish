@@ -33,11 +33,11 @@ Then read this file fully before doing anything else in this session.
 - Obsidian plugin (`plugin/`): publish command (palette + editor context menu), publish modal (slug prefill, debounced availability check, CSPRNG password generation, update-mode password semantics), settings tab (server URL + masked token, test connection, live published-pages table with confirmed unpublish + copy link). `npm run build` clean (zero TS errors), 37/37 vitest tests pass.
 - End-to-end smoke (2026-09-10, `main` after merge): 401 without token → publish → serve → password gate (form-only pre-auth, 401 wrong password, 303+cookie correct, content only with cookie) → list (no hash exposure) → delete → 404. All passed.
 - API contract frozen between plugin and server: bare-array `GET /api/pages`, `DELETE`→204, PUT password omitted=keep / null=remove / string=set, 401/409/400/404 error mapping.
+- Deployment tooling: `deploy/obsidian-publish.service` (hardened systemd unit, dedicated low-priv user, state under `/var/lib/obsidian-publish`), root `Dockerfile` (multi-stage golang→distroless/static non-root, `/data` volume, verified built+run: token printed once, 401 unauthenticated, 404 unused route), `.dockerignore` (allowlist: `server/` only), `deploy/cloudflared.md` + `deploy/droplet.md` (ufw/Caddy/first-run `journalctl` token capture), root `README.md` quickstart. Verified: linux/amd64 + linux/arm64 cross-builds, Docker build and smoke run; systemd unit `systemd-analyze verify` clean.
 
 **Not yet built:**
 - Theming (v2 — `POST /api/theme` deliberately skipped in MVP server)
 - Asset/image publishing (fast-follow)
-- Deployment setup (Cloudflare Tunnel or droplet — owner's choice at deploy time; systemd unit/container not yet written)
 - Plugin↔server integration test inside Obsidian itself (plugin built against the frozen contract; verified by unit tests + server-side e2e only)
 
 **Known issues:**

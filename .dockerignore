@@ -1,0 +1,10 @@
+# The image builds only the Go server, so exclude everything except server/.
+# (Allowlist style: ignore *, then re-include server/.)
+*
+
+# Go server sources and module files
+!server
+!server/**
+
+# Keep the builder hermetic: never ship VCS history, agent scaffolding, local
+# state, or the plugin toolchain into the build context.
