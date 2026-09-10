@@ -1,0 +1,79 @@
+/* Publish (self-hosted) plugin styles */
+
+/* Publish modal */
+.op-publish-modal .op-note-heading {
+  border: none;
+}
+
+.op-publish-modal .op-route-status {
+  min-height: 1.4em;
+  font-size: 0.85em;
+  margin: 0.2em 0 0.8em 0;
+}
+
+.op-route-ok {
+  color: var(--text-success, #4c9a52);
+}
+
+.op-route-bad {
+  color: var(--text-error, #d06559);
+}
+
+.op-route-muted {
+  color: var(--text-muted);
+}
+
+.op-live-url {
+  margin: 0.6em 0 1em 0;
+  word-break: break-all;
+}
+
+.op-live-url a {
+  text-decoration: underline;
+}
+
+/* Settings: published pages */
+.op-pages-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+  margin-top: 0.5em;
+}
+
+.op-pages-table th,
+.op-pages-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  vertical-align: middle;
+}
+
+.op-pages-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.op-route-cell code {
+  color: var(--text-accent);
+}
+
+.op-actions-cell {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.op-actions-cell button {
+  margin-left: 6px;
+}
+
+.op-danger-button {
+  color: var(--text-error);
+}
+
+.op-muted {
+  color: var(--text-muted);
+}
+
+.op-error {
+  color: var(--text-error);
+}

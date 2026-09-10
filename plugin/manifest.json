@@ -1,0 +1,10 @@
+{
+  "id": "selfhosted-publish",
+  "name": "Publish (self-hosted)",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Publish notes to your own self-hosted server, with optional password protection.",
+  "author": "Obsidian Publish",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
