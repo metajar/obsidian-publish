@@ -15,6 +15,7 @@ const (
 	EnvTokenFile  = "OBSPUB_TOKEN_FILE"
 	EnvSecretFile = "OBSPUB_SECRET_FILE"
 	EnvBaseURL    = "OBSPUB_BASE_URL"
+	EnvAssetsDir  = "OBSPUB_ASSETS_DIR"
 )
 
 // Defaults.
@@ -23,6 +24,7 @@ const (
 	DefaultDBPath     = "data/obsidian-publish.db"
 	DefaultTokenFile  = "data/api-token"
 	DefaultSecretFile = "data/session-secret"
+	DefaultAssetsDir  = "data/assets"
 )
 
 // Config is the resolved server configuration.
@@ -39,6 +41,9 @@ type Config struct {
 	// https://notes.example.com) used to build live page URLs in publish
 	// responses. Empty means derive from each request's Host header.
 	BaseURL string
+	// AssetsDir is the on-disk directory holding uploaded image assets,
+	// served publicly at /assets/{filename}.
+	AssetsDir string
 }
 
 // Load parses flags from args with env fallbacks. Exits-on-error behavior is
@@ -51,6 +56,7 @@ func Load(args []string) (*Config, error) {
 	fs.StringVar(&cfg.TokenFile, "token-file", envOr(EnvTokenFile, DefaultTokenFile), "API token file path (env "+EnvTokenFile+")")
 	fs.StringVar(&cfg.SecretFile, "secret-file", envOr(EnvSecretFile, DefaultSecretFile), "session secret file path (env "+EnvSecretFile+")")
 	fs.StringVar(&cfg.BaseURL, "base-url", envOr(EnvBaseURL, ""), "public base URL for live page links, e.g. https://notes.example.com (env "+EnvBaseURL+")")
+	fs.StringVar(&cfg.AssetsDir, "assets-dir", envOr(EnvAssetsDir, DefaultAssetsDir), "directory for uploaded image assets (env "+EnvAssetsDir+")")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}

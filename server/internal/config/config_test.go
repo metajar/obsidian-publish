@@ -46,3 +46,30 @@ func TestUnexpectedArgument(t *testing.T) {
 		t.Errorf("Load(stray) err = %v, want error mentioning the argument", err)
 	}
 }
+
+func TestAssetsDir(t *testing.T) {
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AssetsDir != DefaultAssetsDir {
+		t.Errorf("AssetsDir default = %q, want %q", cfg.AssetsDir, DefaultAssetsDir)
+	}
+
+	t.Setenv(EnvAssetsDir, "/from/env/assets")
+	cfg, err = Load([]string{"-assets-dir", "/from/flag/assets"})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AssetsDir != "/from/flag/assets" {
+		t.Errorf("AssetsDir = %q, want flag value /from/flag/assets", cfg.AssetsDir)
+	}
+
+	cfg, err = Load(nil)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AssetsDir != "/from/env/assets" {
+		t.Errorf("AssetsDir = %q, want env value /from/env/assets", cfg.AssetsDir)
+	}
+}

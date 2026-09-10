@@ -21,8 +21,10 @@ var md = goldmark.New(
 	goldmark.WithExtensions(extension.GFM),
 )
 
-// defaultCSS is the minimal, readable default typography. No theme system
-// in v1.
+// defaultCSS is the minimal, readable default typography, used whenever no
+// global theme or per-page theme override is set. A custom theme replaces it
+// entirely — the owner owns the result (except the password-entry form, which
+// always carries its own stylesheet).
 const defaultCSS = `
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
@@ -58,11 +60,16 @@ func Fragment(markdown string) (string, error) {
 	return buf.String(), nil
 }
 
-// Document renders Markdown into a complete HTML document titled title.
-func Document(title, markdown string) (string, error) {
+// Document renders Markdown into a complete HTML document titled title,
+// embedding css as the page stylesheet. An empty css means the built-in
+// default; a non-empty css replaces the default entirely.
+func Document(title, markdown, css string) (string, error) {
 	body, err := Fragment(markdown)
 	if err != nil {
 		return "", err
+	}
+	if css == "" {
+		css = defaultCSS
 	}
 	var b strings.Builder
 	b.WriteString("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n")
@@ -70,7 +77,7 @@ func Document(title, markdown string) (string, error) {
 	b.WriteString("<title>")
 	b.WriteString(html.EscapeString(title))
 	b.WriteString("</title>\n<style>")
-	b.WriteString(defaultCSS)
+	b.WriteString(css)
 	b.WriteString("\n</style>\n</head>\n<body>\n<article>\n")
 	b.WriteString(body)
 	b.WriteString("\n</article>\n</body>\n</html>\n")
