@@ -32,6 +32,23 @@
   text-decoration: underline;
 }
 
+/* Show-once generated password (publish modal + settings rows) */
+.op-password-reveal {
+  font-family: var(--font-monospace);
+  font-size: 1.05em;
+  letter-spacing: 0.03em;
+  word-break: break-all;
+  padding: 0.5em 0.75em;
+  margin: 0.6em 0 0.4em 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  user-select: all;
+}
+
+.op-password-note {
+  margin: 0.2em 0 0.6em 0;
+}
+
 /* Settings: theme */
 .op-theme-css {
   width: 100%;

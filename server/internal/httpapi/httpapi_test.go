@@ -261,6 +261,79 @@ func TestPageLifecycle(t *testing.T) {
 	}
 }
 
+// --- password-only PUT (settings-row password rotation) ---
+
+// TestUpdatePagePasswordOnly proves the contract the plugin's settings table
+// relies on: PUT /api/pages/{route} with a body of only {"password": "..."}
+// sets/replaces the password and leaves markdown, title, and the per-page
+// theme override untouched — on both protected and previously-public pages.
+func TestUpdatePagePasswordOnly(t *testing.T) {
+	ts := newTestServer(t)
+
+	// Protected page with a title, content, and a theme override.
+	body := `{"route":"goals-alice","title":"Goals","markdown":"# Goals for Alice","password":"old-pass","theme_css":"body { background: papayawhip; }"}`
+	rec := ts.do(t, http.MethodPost, "/api/pages", body, true, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("publish = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Password-only PUT: replace.
+	rec = ts.do(t, http.MethodPut, "/api/pages/goals-alice", `{"password":"new-pass"}`, true, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("password-only update = %d: %s", rec.Code, rec.Body.String())
+	}
+	updated := decodeJSON(t, rec)
+	if updated["route"] != "goals-alice" || updated["title"] != "Goals" || updated["password_protected"] != true {
+		t.Errorf("password-only update response = %v", updated)
+	}
+
+	// The old password stops working; the new one unlocks the page.
+	if rec := ts.doForm(t, http.MethodPost, "/goals-alice/auth", "password=old-pass", "3.3.3.1"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("old password = %d, want 401", rec.Code)
+	}
+	rec = ts.doForm(t, http.MethodPost, "/goals-alice/auth", "password=new-pass", "3.3.3.2")
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("new password = %d, want 303", rec.Code)
+	}
+	ck := rec.Result().Cookies()[0]
+
+	// Content, title, and theme override all survive the password-only PUT.
+	req := httptest.NewRequest(http.MethodGet, "/goals-alice", nil)
+	req.Header.Set("Cookie", session.CookieName+"="+ck.Value)
+	authed := httptest.NewRecorder()
+	ts.e.ServeHTTP(authed, req)
+	if authed.Code != http.StatusOK {
+		t.Fatalf("GET with session = %d", authed.Code)
+	}
+	page := authed.Body.String()
+	if !strings.Contains(page, "Goals for Alice") {
+		t.Error("markdown content not preserved by password-only update")
+	}
+	if !strings.Contains(page, "<title>Goals</title>") {
+		t.Error("title not preserved by password-only update")
+	}
+	if !strings.Contains(page, "papayawhip") {
+		t.Error("per-page theme override not preserved by password-only update")
+	}
+	if strings.Contains(page, "old-pass") || strings.Contains(page, "new-pass") {
+		t.Error("plaintext password leaked into served page")
+	}
+
+	// A previously-public page can be protected the same way.
+	rec = ts.do(t, http.MethodPost, "/api/pages", `{"route":"open-note","markdown":"# Open"}`, true, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("publish open-note = %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = ts.do(t, http.MethodPut, "/api/pages/open-note", `{"password":"first-pass"}`, true, "")
+	if rec.Code != http.StatusOK || decodeJSON(t, rec)["password_protected"] != true {
+		t.Fatalf("protect update = %d: %s", rec.Code, rec.Body.String())
+	}
+	// And the public plane now gates it.
+	if rec := ts.do(t, http.MethodGet, "/open-note", "", false, "3.3.3.3"); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "Open") {
+		t.Errorf("GET after protect = %d (content gated: %v)", rec.Code, !strings.Contains(rec.Body.String(), "Open"))
+	}
+}
+
 // --- password gate, auth flow, rate limiting ---
 
 func publishProtected(t *testing.T, ts *testServer, route, markdown, password string) {

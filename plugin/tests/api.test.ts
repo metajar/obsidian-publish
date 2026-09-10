@@ -202,6 +202,38 @@ describe("PublishApiClient — updatePage", () => {
   });
 });
 
+describe("PublishApiClient — setPagePassword", () => {
+  it("PUTs a password-only body — no title, no markdown", async () => {
+    reply(200, { route: "goals-alice", title: "t", created_at: "", updated_at: "", password_protected: true });
+    const result = await client().setPagePassword("goals-alice", "fresh-pass-123");
+    expect(result.ok).toBe(true);
+    expect(lastRequest?.method).toBe("PUT");
+    expect(lastRequest?.url).toBe(`${BASE}/api/pages/goals-alice`);
+    expect(jsonBody()).toEqual({ password: "fresh-pass-123" });
+  });
+
+  it("sends explicit null to remove protection", async () => {
+    reply(200, { route: "goals-alice", title: "t", created_at: "", updated_at: "", password_protected: false });
+    const result = await client().setPagePassword("goals-alice", null);
+    expect(result.ok).toBe(true);
+    expect(jsonBody()).toEqual({ password: null });
+  });
+
+  it("maps 404 to not-found (page unpublished elsewhere)", async () => {
+    httpError(404);
+    const result = await client().setPagePassword("ghost", "x");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("not-found");
+  });
+
+  it("maps 401 to unauthorized", async () => {
+    httpError(401);
+    const result = await client().setPagePassword("goals-alice", "x");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("unauthorized");
+  });
+});
+
 describe("PublishApiClient — listPages", () => {
   it("parses a bare JSON array response", async () => {
     reply(200, [

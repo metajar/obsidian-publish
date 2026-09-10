@@ -2,6 +2,8 @@ import { App, ButtonComponent, Modal, Notice, Setting, TFile, TextComponent } fr
 import { describeApiError, PageRecord, PublishApiClient } from "./api";
 import { publishNoteImages, type ImagePublishOutcome } from "./imagePublisher";
 import type SelfHostedPublishPlugin from "./main";
+import { generatePassword } from "./password";
+import { ShowPasswordModal } from "./passwordModal";
 import { isValidRoute, slugify } from "./slug";
 
 const AVAILABILITY_DEBOUNCE_MS = 400;
@@ -13,19 +15,6 @@ interface PasswordUiState {
   mode: PasswordMode;
   /** Plaintext password while typing — never persisted, never echoed back from the server (it only has a hash). */
   draft: string;
-}
-
-/** Generate a URL-unambiguous password using the platform CSPRNG. */
-export function generatePassword(length = 20): string {
-  // Alphabet excludes easily-confused characters (l, I, 1, O, 0).
-  const alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const values = new Uint32Array(length);
-  crypto.getRandomValues(values);
-  let out = "";
-  for (let i = 0; i < values.length; i++) {
-    out += alphabet[values[i] % alphabet.length];
-  }
-  return out;
 }
 
 export class PublishModal extends Modal {
@@ -157,8 +146,10 @@ export class PublishModal extends Modal {
         this.passwordState.draft = generated;
         const input = setting.settingEl.querySelector("input");
         if (input instanceof HTMLInputElement) input.value = generated;
-        // Surface the generated password once so the user can share it.
-        new Notice(`Generated password: ${generated}`, 15000);
+        // Surface the generated password once so the user can copy/share it.
+        new ShowPasswordModal(this.app, generated, {
+          note: "Copy it now if you want to share it — it is filled into the masked field and never stored anywhere.",
+        }).open();
       }),
     );
   }

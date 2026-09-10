@@ -216,6 +216,21 @@ export class PublishApiClient {
     );
   }
 
+  /**
+   * Password-only update: PUT `/api/pages/{route}` with just `{password}`.
+   * Markdown, title, and theme stay untouched — used by the settings-table
+   * password action. A string sets/replaces the password; null removes it.
+   */
+  async setPagePassword(route: string, password: string | null): Promise<ApiResult<PageRecord>> {
+    return this.expectPage(
+      await this.request({
+        method: "PUT",
+        path: `/api/pages/${encodeURIComponent(route)}`,
+        body: { password },
+      }),
+    );
+  }
+
   /** List all published pages, with metadata. Live server truth. */
   async listPages(): Promise<ApiResult<PageRecord[]>> {
     const res = await this.request({ method: "GET", path: "/api/pages" });
