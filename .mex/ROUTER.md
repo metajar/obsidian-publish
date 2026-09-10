@@ -30,15 +30,17 @@ Then read this file fully before doing anything else in this session.
 **Working:**
 - `PRD.md` — complete product spec (scope, flows, requirements, API sketch)
 - MEX scaffold — context files populated from the PRD and owner decisions
+- Go server (`server/`, Go module `obsidian-publish/server`): publish/update/delete/list + route-availability APIs behind bearer-token middleware, public page serving with password gate, argon2id hashing, route-scoped HMAC session cookies, per-IP+route rate limiting, SQLite (modernc, pure-Go) persistence, goldmark rendering at publish time. `go build/vet/test ./...` all pass from `server/`.
 
-**Not yet built (everything):**
-- Go server (Echo + SQLite + goldmark + argon2id): publish/update/delete/list APIs, route serving, password gate, token auth
+**Not yet built:**
 - Obsidian plugin: publish command + modal, settings (server config, page list, unpublish, theme)
+- Theming (v2 — `POST /api/theme` deliberately skipped in MVP server)
+- Asset/image publishing (fast-follow)
 - Deployment setup (Cloudflare Tunnel or droplet — owner's choice at deploy time)
 
 **Known issues:**
-- Open decisions in `context/decisions.md`: theming scope, session mechanism, route namespace, asset handling, custom CSS limits
-- Commands, naming, and structure conventions are placeholders until first implementation
+- Open decisions in `context/decisions.md`: theming scope, route namespace, asset handling, custom CSS limits (session mechanism is now decided: route-scoped cookie)
+- API PUT password semantics agreed with plugin side: omitted = keep, JSON null (or "") = remove, string = set
 
 ## Routing Table
 
