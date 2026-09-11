@@ -1,7 +1,7 @@
 {
   "id": "selfhosted-publish",
   "name": "Publish (self-hosted)",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "minAppVersion": "1.4.0",
   "description": "Publish notes to your own self-hosted server, with optional password protection.",
   "author": "Jared Henry",
