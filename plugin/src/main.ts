@@ -73,9 +73,19 @@ export default class SelfHostedPublishPlugin extends Plugin {
     this.openPublishModal(file);
   }
 
-  openPublishModal(file: TFile): void {
+  async openPublishModal(file: TFile): Promise<void> {
     const client = this.getClient();
-    const existing = this.getLocalRouteEntry(file.path);
+    let existing = this.getLocalRouteEntry(file.path);
+    if (existing) {
+      // The local map is a convenience only — verify against the server
+      // before offering update mode, or a stale entry (page unpublished
+      // elsewhere) would send the modal into a PUT that 404s.
+      const check = await client.checkRouteAvailable(existing.route);
+      if (check.ok && check.data) {
+        await this.forgetRoute(existing.route);
+        existing = null;
+      }
+    }
     new PublishModal(this.app, this, file, client, existing).open();
   }
 

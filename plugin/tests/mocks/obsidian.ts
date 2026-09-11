@@ -182,3 +182,43 @@ export function setIcon(parent: FakeEl, _iconId: string): void {
   parent.createEl("i", { cls: "mock-icon" });
 }
 
+
+// -- Plugin lifecycle mocks (for main.ts tests) ------------------------------
+
+export class TextComponent {
+  constructor(_el?: unknown) {}
+  setValue(_v: string): this { return this; }
+  setPlaceholder(_p: string): this { return this; }
+  onChange(_cb: () => void): this { return this; }
+}
+
+export class PluginSettingTab {
+  containerEl = new FakeEl("div");
+  constructor(public app: unknown, public plugin: unknown) {}
+  display(): void {}
+  hide(): void {}
+}
+
+export class TFile {
+  constructor(
+    public path = "note.md",
+    public extension = "md",
+    public basename = "note",
+  ) {}
+}
+
+/** loadData/saveData round-trip through a global, so tests can seed plugin data. */
+export class Plugin {
+  app: unknown = {};
+  manifest: unknown = {};
+  async loadData(): Promise<unknown> {
+    return (globalThis as Record<string, unknown>).__pluginData ?? null;
+  }
+  async saveData(data: unknown): Promise<void> {
+    (globalThis as Record<string, unknown>).__pluginData = data;
+  }
+}
+
+export function __resetPluginData(): void {
+  delete (globalThis as Record<string, unknown>).__pluginData;
+}

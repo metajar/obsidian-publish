@@ -275,9 +275,17 @@ export class PublishModal extends Modal {
       });
 
       const isUpdate = this.existing !== null && this.route === this.existing.route;
-      const result = isUpdate
+      let result = isUpdate
         ? await this.client.updatePage(this.route, { title, markdown: images.markdown, password })
         : await this.client.createPage(this.route, { title, markdown: images.markdown, password: password ?? undefined });
+
+      // A stale local mapping (page unpublished since the map was written)
+      // makes the update PUT 404 — recover transparently by creating the
+      // page fresh instead of surfacing an error.
+      if (!result.ok && isUpdate && result.error.kind === "not-found") {
+        await this.plugin.forgetRoute(this.existing!.route);
+        result = await this.client.createPage(this.route, { title, markdown: images.markdown, password: password ?? undefined });
+      }
 
       if (!result.ok) {
         new Notice(describeApiError(result.error), 8000);
