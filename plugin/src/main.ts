@@ -1,5 +1,6 @@
 import { Notice, Plugin, TFile } from "obsidian";
-import { PublishApiClient } from "./api";
+import { describeApiError, PublishApiClient } from "./api";
+import { ConfirmModal } from "./confirmModal";
 import { PublishModal } from "./publishModal";
 import { PublishSettingTab } from "./settings";
 
@@ -46,6 +47,20 @@ export default class SelfHostedPublishPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "unpublish-current-note",
+      name: "Unpublish this note",
+      checkCallback: (checking: boolean) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension !== "md") return false;
+        // The local map only gates palette visibility; unpublishNote still
+        // verifies against the server before deleting anything.
+        if (!this.getLocalRouteEntry(file.path)) return false;
+        if (!checking) void this.unpublishNote(file);
+        return true;
+      },
+    });
+
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu, _editor, info) => {
         const file =
@@ -57,6 +72,14 @@ export default class SelfHostedPublishPlugin extends Plugin {
             .setIcon("cloud-upload")
             .onClick(() => this.openPublishModal(file)),
         );
+        if (this.getLocalRouteEntry(file.path)) {
+          menu.addItem((item) =>
+            item
+              .setTitle("Unpublish")
+              .setIcon("trash-2")
+              .onClick(() => void this.unpublishNote(file)),
+          );
+        }
       }),
     );
 
@@ -87,6 +110,44 @@ export default class SelfHostedPublishPlugin extends Plugin {
       }
     }
     new PublishModal(this.app, this, file, client, existing).open();
+  }
+
+  /**
+   * Unpublish entry point for the command and note context menu. The local
+   * map only nominates the route — the server decides what actually happens.
+   */
+  async unpublishNote(file: TFile): Promise<void> {
+    const entry = this.getLocalRouteEntry(file.path);
+    if (!entry) {
+      new Notice("Unpublish: this note has no publish record in this vault.");
+      return;
+    }
+    const client = this.getClient();
+    // Same verification as the publish modal: a free route means the page is
+    // already gone (unpublished elsewhere) — drop the stale entry, don't delete.
+    const check = await client.checkRouteAvailable(entry.route);
+    if (check.ok && check.data) {
+      await this.forgetRoute(entry.route);
+      new Notice(`Unpublish: /${entry.route} is not currently published — removed the stale local record.`);
+      return;
+    }
+    new ConfirmModal(this.app, {
+      title: `Unpublish /${entry.route}?`,
+      body: `“${file.basename}” will stop resolving immediately — readers will get a 404. This cannot be undone from the plugin, but you can publish it again at any time.`,
+      confirmText: "Unpublish",
+      onConfirm: async () => {
+        const result = await client.deletePage(entry.route);
+        if (result.ok) {
+          new Notice(`Unpublished /${entry.route}.`);
+        } else if (result.error.kind === "not-found") {
+          new Notice(`/${entry.route} was already unpublished — removed the stale local record.`);
+        } else {
+          new Notice(describeApiError(result.error, "Unpublish"), 8000);
+          return; // outcome unknown — keep the local mapping for a retry
+        }
+        await this.forgetRoute(entry.route);
+      },
+    }).open();
   }
 
   getClient(): PublishApiClient {
