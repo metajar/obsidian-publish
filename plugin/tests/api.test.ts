@@ -268,11 +268,19 @@ describe("PublishApiClient — listPages", () => {
 });
 
 describe("PublishApiClient — deletePage", () => {
-  it("treats 204 as success", async () => {
-    reply(204, undefined, "");
+  it("treats the 200 + JSON body contract as success", async () => {
+    // The server returns {"deleted": route} — not an empty 204 — because
+    // Obsidian's requestUrl throws a JSON EOF error on empty bodies.
+    reply(200, { deleted: "gone" });
     const result = await client().deletePage("gone");
     expect(lastRequest?.method).toBe("DELETE");
     expect(lastRequest?.url).toBe(`${BASE}/api/pages/gone`);
+    expect(result).toEqual({ ok: true, data: null });
+  });
+
+  it("treats 204 as success", async () => {
+    reply(204, undefined, "");
+    const result = await client().deletePage("gone");
     expect(result).toEqual({ ok: true, data: null });
   });
 

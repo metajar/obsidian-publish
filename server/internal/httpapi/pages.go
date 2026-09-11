@@ -241,7 +241,11 @@ func (s *Server) deletePage(c echo.Context) error {
 		return err
 	}
 	s.logInfo("unpublish", "route", route)
-	return c.NoContent(http.StatusNoContent)
+	// 200 with a JSON body, not 204: Obsidian's requestUrl parses every
+	// response body as JSON and rejects an empty one ("Unexpected end of
+	// JSON input"), which the plugin would misreport as an unreachable
+	// server even though the delete succeeded.
+	return c.JSON(http.StatusOK, map[string]string{"deleted": route})
 }
 
 func (s *Server) pageResponse(c echo.Context, p *store.Page) pageResponse {

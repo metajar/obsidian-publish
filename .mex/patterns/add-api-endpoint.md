@@ -15,7 +15,7 @@ edges:
   - target: context/conventions.md
     condition: for the verify checklist before presenting the code
 grounds_to: []
-last_updated: 2026-09-10
+last_updated: 2026-09-11
 ---
 
 # Add an API endpoint
@@ -31,6 +31,7 @@ The API contract lives in `PRD.md` §10. Endpoints come in pairs by trust plane:
 5. Update both sides' error handling so the plugin can surface server errors (route taken, invalid token, unreachable).
 
 ## Gotchas
+- Never return an empty-body 2xx (204/empty 200): Obsidian's `requestUrl` JSON-parses every response body and throws "Unexpected end of JSON input" on empty ones — the plugin maps that to "could not reach the server" even though the request succeeded (hit live on DELETE in 0.0.4). Return a small JSON body instead.
 - Exact layout (as implemented): routes wired in `server/internal/httpapi/server.go` (authed `/api` Echo group vs public), plugin-API handlers in `pages.go`, reader handlers + password form in `public.go`, persistence in `server/internal/store/store.go` (SQLite via modernc, `user_version` pragma for schema versioning).
 - Never add a plugin-API behavior to a public route or vice versa (hard invariant).
 - Route slug validation must run on the server too — the plugin's client-side check is UX, not security.

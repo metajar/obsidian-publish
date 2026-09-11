@@ -242,10 +242,11 @@ func TestPageLifecycle(t *testing.T) {
 		t.Errorf("update unknown route = %d, want 404", rec.Code)
 	}
 
-	// Unpublish.
+	// Unpublish: 200 with a JSON body (not 204) so Obsidian's requestUrl
+	// can parse the response — an empty body makes it throw a JSON EOF error.
 	rec = ts.do(t, http.MethodDelete, "/api/pages/trip-plan", "", true, "")
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("delete = %d, want 204", rec.Code)
+	if rec.Code != http.StatusOK || decodeJSON(t, rec)["deleted"] != "trip-plan" {
+		t.Fatalf("delete = %d: %s", rec.Code, rec.Body.String())
 	}
 	rec = ts.do(t, http.MethodGet, "/trip-plan", "", false, "8.8.8.8")
 	if rec.Code != http.StatusNotFound {

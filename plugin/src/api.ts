@@ -8,7 +8,9 @@ import { requestUrl } from "obsidian";
  *   POST   /api/pages
  *   PUT    /api/pages/{route}
  *   GET    /api/pages
- *   DELETE /api/pages/{route}
+ *   DELETE /api/pages/{route}  → 200 + {"deleted": route} (not an empty 204:
+ *                                 Obsidian's requestUrl throws a JSON EOF
+ *                                 error on bodies it cannot parse)
  *   GET    /api/theme
  *   POST   /api/theme
  *   POST   /api/assets   (multipart; images only)
